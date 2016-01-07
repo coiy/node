@@ -375,6 +375,9 @@ Once a socket is assigned to this request and is connected
 Once a socket is assigned to this request and is connected
 [`socket.setTimeout()`][] will be called.
 
+* `timeout` {Number} Milliseconds before a request is considered to be timed out.
+* `callback` {Function} Optional function to be called when a timeout occurs. Same as binding to the `timeout` event.
+
 ### request.write(chunk[, encoding][, callback])
 
 Sends a chunk of the body.  By calling this method
@@ -395,7 +398,7 @@ Returns `request`.
 
 ## Class: http.Server
 
-This is an [`EventEmitter`][] with the following events:
+This class inherits from [`net.Server`][] and has the following additional events:
 
 ### Event: 'checkContinue'
 
@@ -418,6 +421,11 @@ not be emitted.
 `function (exception, socket) { }`
 
 If a client connection emits an `'error'` event, it will be forwarded here.
+Listener of this event is responsible for closing/destroying the underlying
+socket. For example, one may wish to more gracefully close the socket with an
+HTTP '400 Bad Request' response instead of abruptly severing the connection.
+
+Default behavior is to destroy the socket immediately on malformed request.
 
 `socket` is the [`net.Socket`][] object that the error originated from.
 
@@ -1096,6 +1104,7 @@ There are a few special headers that should be noted.
 [`http.Server`]: #http_class_http_server
 [`http.ServerResponse`]: #http_class_http_serverresponse
 [`message.headers`]: #http_message_headers
+[`net.Server`]: net.html#net_class_net_server
 [`net.Server.close()`]: net.html#net_server_close_callback
 [`net.Server.listen()`]: net.html#net_server_listen_handle_callback
 [`net.Server.listen(path)`]: net.html#net_server_listen_path_callback

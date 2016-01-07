@@ -340,7 +340,7 @@ An example of the possible output looks like:
          target_arch: 'x64',
          v8_use_snapshot: 'true' } }
 
-### process.connected
+## process.connected
 
 * {Boolean} Set to false after `process.disconnect()` is called
 
@@ -891,7 +891,7 @@ See [the tty docs][] for more information.
 
 ## process.title
 
-Getter/setter to set what is displayed in `ps.
+Getter/setter to set what is displayed in `ps`.
 
 When used as a setter, the maximum length is platform-specific and probably
 short.

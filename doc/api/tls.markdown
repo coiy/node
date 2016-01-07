@@ -169,7 +169,7 @@ This class is a subclass of `net.Server` and has the same methods on it.
 Instead of accepting just raw TCP connections, this accepts encrypted
 connections using TLS or SSL.
 
-### Event: 'clientError'
+### Event: 'tlsClientError'
 
 `function (exception, tlsSocket) { }`
 
@@ -598,7 +598,7 @@ Creates a new client connection to the given `port` and `host` (old API) or
     OpenSSL and are defined in the constant [SSL_METHODS][].
 
   - `secureContext`: An optional TLS context object from
-     `tls.createSecureContext( ... )`. Could it be used for caching client
+     `tls.createSecureContext( ... )`. It could be used for caching client
      certificates, key, and CA certificates.
 
   - `session`: A `Buffer` instance, containing TLS session.
