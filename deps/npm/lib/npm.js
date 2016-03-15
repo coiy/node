@@ -70,6 +70,7 @@
     'ln': 'link',
     'i': 'install',
     'isntall': 'install',
+    'it': 'install-test',
     'up': 'update',
     'upgrade': 'update',
     'c': 'config',
@@ -99,6 +100,7 @@
   // these are filenames in .
   var cmdList = [
     'install',
+    'install-test',
     'uninstall',
     'cache',
     'config',
@@ -285,7 +287,12 @@
       loadCb(loadErr = er)
       onload = onload && npm.config.get('onload-script')
       if (onload) {
-        require(onload)
+        try {
+          require(onload)
+        } catch (err) {
+          log.warn('onload-script', 'failed to require onload script', onload)
+          log.warn('onload-script', err)
+        }
         onload = false
       }
     }

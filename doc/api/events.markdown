@@ -37,7 +37,7 @@ function MyEmitter() {
 util.inherits(MyEmitter, EventEmitter);
 
 const myEmitter = new MyEmitter();
-myEmitter.on('event', function() {
+myEmitter.on('event', () => {
   console.log('an event occurred!');
 });
 myEmitter.emit('event');
@@ -54,7 +54,7 @@ const EventEmitter = require('events');
 class MyEmitter extends EventEmitter {}
 
 const myEmitter = new MyEmitter();
-myEmitter.on('event', function() {
+myEmitter.on('event', () => {
   console.log('an event occurred!');
 });
 myEmitter.emit('event');
@@ -364,7 +364,7 @@ Removes the specified `listener` from the listener array for the specified
 `event`.
 
 ```js
-var callback = function(stream) {
+var callback = (stream) => {
   console.log('someone connected!');
 };
 server.on('connection', callback);
@@ -376,6 +376,43 @@ server.removeListener('connection', callback);
 listener array. If any single listener has been added multiple times to the
 listener array for the specified `event`, then `removeListener` must be called
 multiple times to remove each instance.
+
+Note that once an event has been emitted, all listeners attached to it at the
+time of emitting will be called in order. This implies that any `removeListener()`
+or `removeAllListeners()` calls *after* emitting and *before* the last listener
+finishes execution will not remove them from `emit()` in progress. Subsequent
+events will behave as expected.
+
+```js
+const myEmitter = new MyEmitter();
+
+var callbackA = () => {
+  console.log('A');
+  myEmitter.removeListener('event', callbackB);
+};
+
+var callbackB = () => {
+  console.log('B');
+};
+
+myEmitter.on('event', callbackA);
+
+myEmitter.on('event', callbackB);
+
+// callbackA removes listener callbackB but it will still be called.
+// Interal listener array at time of emit [callbackA, callbackB]
+myEmitter.emit('event');
+  // Prints:
+  //   A
+  //   B
+
+// callbackB is now removed.
+// Interal listener array [callbackA]
+myEmitter.emit('event');
+  // Prints:
+  //   A
+
+```
 
 Because listeners are managed using an internal array, calling this will
 change the position indices of any listener registered *after* the listener

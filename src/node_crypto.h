@@ -248,6 +248,7 @@ class SSLWrap {
   static void RequestOCSP(const v8::FunctionCallbackInfo<v8::Value>& args);
   static void GetEphemeralKeyInfo(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+  static void GetProtocol(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 #ifdef SSL_set_max_send_fragment
   static void SetMaxSendFragment(
@@ -729,29 +730,6 @@ class ECDH : public BaseObject {
 
   EC_KEY* key_;
   const EC_GROUP* group_;
-};
-
-class Certificate : public AsyncWrap {
- public:
-  static void Initialize(Environment* env, v8::Local<v8::Object> target);
-
-  v8::Local<v8::Value> CertificateInit(const char* sign_type);
-  bool VerifySpkac(const char* data, unsigned int len);
-  const char* ExportPublicKey(const char* data, int len);
-  const char* ExportChallenge(const char* data, int len);
-
-  size_t self_size() const override { return sizeof(*this); }
-
- protected:
-  static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void VerifySpkac(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ExportPublicKey(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void ExportChallenge(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  Certificate(Environment* env, v8::Local<v8::Object> wrap)
-      : AsyncWrap(env, wrap, AsyncWrap::PROVIDER_CRYPTO) {
-    MakeWeak<Certificate>(this);
-  }
 };
 
 bool EntropySource(unsigned char* buffer, size_t length);

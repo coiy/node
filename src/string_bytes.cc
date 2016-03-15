@@ -77,7 +77,7 @@ class ExternString: public ResourceType {
       ExternString* h_str = new ExternString<ResourceType, TypeName>(isolate,
                                                                      data,
                                                                      length);
-      MaybeLocal<String> str = String::NewExternal(isolate, h_str);
+      MaybeLocal<String> str = NewExternal(isolate, h_str);
       isolate->AdjustAmountOfExternalAllocatedMemory(h_str->byte_length());
 
       if (str.IsEmpty()) {
@@ -93,6 +93,9 @@ class ExternString: public ResourceType {
   private:
     ExternString(Isolate* isolate, const TypeName* data, size_t length)
       : isolate_(isolate), data_(data), length_(length) { }
+    static MaybeLocal<String> NewExternal(Isolate* isolate,
+                                          ExternString* h_str);
+
     Isolate* isolate_;
     const TypeName* data_;
     size_t length_;
@@ -103,6 +106,20 @@ typedef ExternString<String::ExternalOneByteStringResource,
                      char> ExternOneByteString;
 typedef ExternString<String::ExternalStringResource,
                      uint16_t> ExternTwoByteString;
+
+
+template <>
+MaybeLocal<String> ExternOneByteString::NewExternal(
+    Isolate* isolate, ExternOneByteString* h_str) {
+  return String::NewExternalOneByte(isolate, h_str);
+}
+
+
+template <>
+MaybeLocal<String> ExternTwoByteString::NewExternal(
+    Isolate* isolate, ExternTwoByteString* h_str) {
+  return String::NewExternalTwoByte(isolate, h_str);
+}
 
 
 //// Base 64 ////
@@ -368,7 +385,6 @@ size_t StringBytes::Write(Isolate* isolate,
   switch (encoding) {
     case ASCII:
     case BINARY:
-    case BUFFER:
       if (is_extern && str->IsOneByte()) {
         memcpy(buf, data, nbytes);
       } else {
@@ -379,6 +395,7 @@ size_t StringBytes::Write(Isolate* isolate,
         *chars_written = nbytes;
       break;
 
+    case BUFFER:
     case UTF8:
       nbytes = str->WriteUtf8(buf, buflen, chars_written, flags);
       break;
@@ -480,11 +497,11 @@ size_t StringBytes::StorageSize(Isolate* isolate,
 
   switch (encoding) {
     case BINARY:
-    case BUFFER:
     case ASCII:
       data_size = str->Length();
       break;
 
+    case BUFFER:
     case UTF8:
       // A single UCS2 codepoint never takes up more than 3 utf8 bytes.
       // It is an exercise for the caller to decide when a string is
@@ -532,11 +549,11 @@ size_t StringBytes::Size(Isolate* isolate,
 
   switch (encoding) {
     case BINARY:
-    case BUFFER:
     case ASCII:
       data_size = str->Length();
       break;
 
+    case BUFFER:
     case UTF8:
       data_size = str->Utf8Length();
       break;

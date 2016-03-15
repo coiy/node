@@ -6,6 +6,7 @@
 #include "node_javascript.h"
 #include "node_version.h"
 #include "node_internals.h"
+#include "node_revert.h"
 
 #if defined HAVE_PERFCTR
 #include "node_counters.h"
@@ -114,13 +115,16 @@ using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Locker;
+using v8::MaybeLocal;
 using v8::Message;
+using v8::Name;
 using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
 using v8::Promise;
 using v8::PromiseRejectMessage;
 using v8::PropertyCallbackInfo;
+using v8::ScriptOrigin;
 using v8::SealHandleScope;
 using v8::StackFrame;
 using v8::StackTrace;
@@ -159,6 +163,12 @@ static const char* icu_data_dir = nullptr;
 
 // used by C++ modules as well
 bool no_deprecation = false;
+
+#if HAVE_OPENSSL && NODE_FIPS_MODE
+// used by crypto module
+bool enable_fips_crypto = false;
+bool force_fips_crypto = false;
+#endif
 
 // process-relative uptime base, initialized at start-up
 static double prog_start_time;
@@ -1042,7 +1052,8 @@ void SetupDomainUse(const FunctionCallbackInfo<Value>& args) {
 
   // Do a little housekeeping.
   env->process_object()->Delete(
-      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupDomainUse"));
+      env->context(),
+      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupDomainUse")).FromJust();
 
   uint32_t* const fields = env->domain_flag()->fields();
   uint32_t const fields_count = env->domain_flag()->fields_count();
@@ -1065,7 +1076,8 @@ void SetupProcessObject(const FunctionCallbackInfo<Value>& args) {
 
   env->set_push_values_to_array_function(args[0].As<Function>());
   env->process_object()->Delete(
-      FIXED_ONE_BYTE_STRING(env->isolate(), "_setupProcessObject"));
+      env->context(),
+      FIXED_ONE_BYTE_STRING(env->isolate(), "_setupProcessObject")).FromJust();
 }
 
 
@@ -1081,7 +1093,8 @@ void SetupNextTick(const FunctionCallbackInfo<Value>& args) {
 
   // Do a little housekeeping.
   env->process_object()->Delete(
-      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupNextTick"));
+      env->context(),
+      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupNextTick")).FromJust();
 
   // Values use to cross communicate with processNextTick.
   uint32_t* const fields = env->tick_info()->fields();
@@ -1121,15 +1134,16 @@ void SetupPromises(const FunctionCallbackInfo<Value>& args) {
   env->set_promise_reject_function(args[0].As<Function>());
 
   env->process_object()->Delete(
-      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupPromises"));
+      env->context(),
+      FIXED_ONE_BYTE_STRING(args.GetIsolate(), "_setupPromises")).FromJust();
 }
 
 
 Local<Value> MakeCallback(Environment* env,
-                           Local<Value> recv,
-                           const Local<Function> callback,
-                           int argc,
-                           Local<Value> argv[]) {
+                          Local<Value> recv,
+                          const Local<Function> callback,
+                          int argc,
+                          Local<Value> argv[]) {
   // If you hit this assertion, you forgot to enter the v8::Context first.
   CHECK_EQ(env->context(), env->isolate()->GetCurrentContext());
 
@@ -1138,6 +1152,8 @@ Local<Value> MakeCallback(Environment* env,
   Local<Object> object, domain;
   bool ran_init_callback = false;
   bool has_domain = false;
+
+  Environment::AsyncCallbackScope callback_scope(env);
 
   // TODO(trevnorris): Adding "_asyncQueue" to the "this" in the init callback
   // is a horrible way to detect usage. Rethink how detection should happen.
@@ -1159,51 +1175,49 @@ Local<Value> MakeCallback(Environment* env,
     }
   }
 
-  TryCatch try_catch;
-  try_catch.SetVerbose(true);
-
   if (has_domain) {
     Local<Value> enter_v = domain->Get(env->enter_string());
     if (enter_v->IsFunction()) {
-        enter_v.As<Function>()->Call(domain, 0, nullptr);
-      if (try_catch.HasCaught())
-        return Undefined(env->isolate());
+      if (enter_v.As<Function>()->Call(domain, 0, nullptr).IsEmpty()) {
+        FatalError("node::MakeCallback",
+                   "domain enter callback threw, please report this");
+      }
     }
   }
 
   if (ran_init_callback && !pre_fn.IsEmpty()) {
-    try_catch.SetVerbose(false);
-    pre_fn->Call(object, 0, nullptr);
-    if (try_catch.HasCaught())
+    if (pre_fn->Call(object, 0, nullptr).IsEmpty())
       FatalError("node::MakeCallback", "pre hook threw");
-    try_catch.SetVerbose(true);
   }
 
   Local<Value> ret = callback->Call(recv, argc, argv);
 
   if (ran_init_callback && !post_fn.IsEmpty()) {
-    try_catch.SetVerbose(false);
-    post_fn->Call(object, 0, nullptr);
-    if (try_catch.HasCaught())
+    if (post_fn->Call(object, 0, nullptr).IsEmpty())
       FatalError("node::MakeCallback", "post hook threw");
-    try_catch.SetVerbose(true);
+  }
+
+  if (ret.IsEmpty()) {
+    if (callback_scope.in_makecallback())
+      return ret;
+    // NOTE: Undefined() is returned here for backwards compatibility.
+    else
+      return Undefined(env->isolate());
   }
 
   if (has_domain) {
     Local<Value> exit_v = domain->Get(env->exit_string());
     if (exit_v->IsFunction()) {
-      exit_v.As<Function>()->Call(domain, 0, nullptr);
-      if (try_catch.HasCaught())
-        return Undefined(env->isolate());
+      if (exit_v.As<Function>()->Call(domain, 0, nullptr).IsEmpty()) {
+        FatalError("node::MakeCallback",
+                   "domain exit callback threw, please report this");
+      }
     }
   }
 
-  if (try_catch.HasCaught()) {
+  if (!env->KickNextTick(&callback_scope)) {
     return Undefined(env->isolate());
   }
-
-  if (!env->KickNextTick())
-    return Undefined(env->isolate());
 
   return ret;
 }
@@ -1402,8 +1416,10 @@ ssize_t DecodeWrite(Isolate* isolate,
 bool IsExceptionDecorated(Environment* env, Local<Value> er) {
   if (!er.IsEmpty() && er->IsObject()) {
     Local<Object> err_obj = er.As<Object>();
-    Local<Value> decorated = err_obj->GetHiddenValue(env->decorated_string());
-    return !decorated.IsEmpty() && decorated->IsTrue();
+    auto maybe_value =
+        err_obj->GetPrivate(env->context(), env->decorated_private_symbol());
+    Local<Value> decorated;
+    return maybe_value.ToLocal(&decorated) && decorated->IsTrue();
   }
   return false;
 }
@@ -1419,10 +1435,15 @@ void AppendExceptionLine(Environment* env,
   if (!er.IsEmpty() && er->IsObject()) {
     err_obj = er.As<Object>();
 
+    auto context = env->context();
+    auto processed_private_symbol = env->processed_private_symbol();
     // Do it only once per message
-    if (!err_obj->GetHiddenValue(env->processed_string()).IsEmpty())
+    if (err_obj->HasPrivate(context, processed_private_symbol).FromJust())
       return;
-    err_obj->SetHiddenValue(env->processed_string(), True(env->isolate()));
+    err_obj->SetPrivate(
+        context,
+        processed_private_symbol,
+        True(env->isolate()));
   }
 
   // Print (filename):(line number): (message).
@@ -1454,8 +1475,8 @@ void AppendExceptionLine(Environment* env,
   // sourceline to 78 characters, and we end up not providing very much
   // useful debugging info to the user if we remove 62 characters.
 
-  int start = message->GetStartColumn();
-  int end = message->GetEndColumn();
+  int start = message->GetStartColumn(env->context()).FromJust();
+  int end = message->GetEndColumn(env->context()).FromJust();
 
   char arrow[1024];
   int max_off = sizeof(arrow) - 2;
@@ -1492,14 +1513,15 @@ void AppendExceptionLine(Environment* env,
 
   Local<String> arrow_str = String::NewFromUtf8(env->isolate(), arrow);
 
-  // Allocation failed, just print it out
-  if (arrow_str.IsEmpty() || err_obj.IsEmpty() || !err_obj->IsNativeError())
-    goto print;
+  if (!arrow_str.IsEmpty() && !err_obj.IsEmpty() && err_obj->IsNativeError()) {
+    err_obj->SetPrivate(
+        env->context(),
+        env->arrow_message_private_symbol(),
+        arrow_str);
+    return;
+  }
 
-  err_obj->SetHiddenValue(env->arrow_message_string(), arrow_str);
-  return;
-
- print:
+  // Allocation failed, just print it out.
   if (env->printed_error())
     return;
   env->set_printed_error(true);
@@ -1525,7 +1547,10 @@ static void ReportException(Environment* env,
     Local<Object> err_obj = er->ToObject(env->isolate());
 
     trace_value = err_obj->Get(env->stack_string());
-    arrow = err_obj->GetHiddenValue(env->arrow_message_string());
+    arrow =
+        err_obj->GetPrivate(
+            env->context(),
+            env->arrow_message_private_symbol()).ToLocalChecked();
   }
 
   node::Utf8Value trace(env->isolate(), trace_value);
@@ -1590,19 +1615,21 @@ static Local<Value> ExecuteString(Environment* env,
                                   Local<String> source,
                                   Local<String> filename) {
   EscapableHandleScope scope(env->isolate());
-  TryCatch try_catch;
+  TryCatch try_catch(env->isolate());
 
   // try_catch must be nonverbose to disable FatalException() handler,
   // we will handle exceptions ourself.
   try_catch.SetVerbose(false);
 
-  Local<v8::Script> script = v8::Script::Compile(source, filename);
+  ScriptOrigin origin(filename);
+  MaybeLocal<v8::Script> script =
+      v8::Script::Compile(env->context(), source, &origin);
   if (script.IsEmpty()) {
     ReportException(env, try_catch);
     exit(3);
   }
 
-  Local<Value> result = script->Run();
+  Local<Value> result = script.ToLocalChecked()->Run();
   if (result.IsEmpty()) {
     ReportException(env, try_catch);
     exit(4);
@@ -1852,7 +1879,6 @@ static gid_t gid_by_name(Isolate* isolate, Local<Value> value) {
     return gid_by_name(*name);
   }
 }
-
 
 static void GetUid(const FunctionCallbackInfo<Value>& args) {
   // uid_t is an uint32_t on all supported platforms.
@@ -2314,7 +2340,7 @@ void FatalException(Isolate* isolate,
     exit(6);
   }
 
-  TryCatch fatal_try_catch;
+  TryCatch fatal_try_catch(isolate);
 
   // Do not call FatalException when _fatalException handler throws
   fatal_try_catch.SetVerbose(false);
@@ -2360,7 +2386,7 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
   Local<Object> cache = env->binding_cache_object();
   Local<Object> exports;
 
-  if (cache->Has(module)) {
+  if (cache->Has(env->context(), module).FromJust()) {
     exports = cache->Get(module)->ToObject(env->isolate());
     args.GetReturnValue().Set(exports);
     return;
@@ -2407,27 +2433,30 @@ static void Binding(const FunctionCallbackInfo<Value>& args) {
 static void LinkedBinding(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args.GetIsolate());
 
-  Local<String> module = args[0]->ToString(env->isolate());
+  Local<String> module_name = args[0]->ToString(env->isolate());
 
   Local<Object> cache = env->binding_cache_object();
-  Local<Value> exports_v = cache->Get(module);
+  Local<Value> exports_v = cache->Get(module_name);
 
   if (exports_v->IsObject())
     return args.GetReturnValue().Set(exports_v.As<Object>());
 
-  node::Utf8Value module_v(env->isolate(), module);
-  node_module* mod = get_linked_module(*module_v);
+  node::Utf8Value module_name_v(env->isolate(), module_name);
+  node_module* mod = get_linked_module(*module_name_v);
 
   if (mod == nullptr) {
     char errmsg[1024];
     snprintf(errmsg,
              sizeof(errmsg),
              "No such module was linked: %s",
-             *module_v);
+             *module_name_v);
     return env->ThrowError(errmsg);
   }
 
+  Local<Object> module = Object::New(env->isolate());
   Local<Object> exports = Object::New(env->isolate());
+  Local<String> exports_prop = String::NewFromUtf8(env->isolate(), "exports");
+  module->Set(exports_prop, exports);
 
   if (mod->nm_context_register_func != nullptr) {
     mod->nm_context_register_func(exports,
@@ -2440,12 +2469,13 @@ static void LinkedBinding(const FunctionCallbackInfo<Value>& args) {
     return env->ThrowError("Linked module has no declared entry point.");
   }
 
-  cache->Set(module, exports);
+  auto effective_exports = module->Get(exports_prop);
+  cache->Set(module_name, effective_exports);
 
-  args.GetReturnValue().Set(exports);
+  args.GetReturnValue().Set(effective_exports);
 }
 
-static void ProcessTitleGetter(Local<String> property,
+static void ProcessTitleGetter(Local<Name> property,
                                const PropertyCallbackInfo<Value>& info) {
   char buffer[512];
   uv_get_process_title(buffer, sizeof(buffer));
@@ -2453,7 +2483,7 @@ static void ProcessTitleGetter(Local<String> property,
 }
 
 
-static void ProcessTitleSetter(Local<String> property,
+static void ProcessTitleSetter(Local<Name> property,
                                Local<Value> value,
                                const PropertyCallbackInfo<void>& info) {
   node::Utf8Value title(info.GetIsolate(), value);
@@ -2682,13 +2712,13 @@ static Local<Object> GetFeatures(Environment* env) {
 }
 
 
-static void DebugPortGetter(Local<String> property,
+static void DebugPortGetter(Local<Name> property,
                             const PropertyCallbackInfo<Value>& info) {
   info.GetReturnValue().Set(debug_port);
 }
 
 
-static void DebugPortSetter(Local<String> property,
+static void DebugPortSetter(Local<Name> property,
                             Local<Value> value,
                             const PropertyCallbackInfo<void>& info) {
   debug_port = value->Int32Value();
@@ -2700,7 +2730,7 @@ static void DebugPause(const FunctionCallbackInfo<Value>& args);
 static void DebugEnd(const FunctionCallbackInfo<Value>& args);
 
 
-void NeedImmediateCallbackGetter(Local<String> property,
+void NeedImmediateCallbackGetter(Local<Name> property,
                                  const PropertyCallbackInfo<Value>& info) {
   Environment* env = Environment::GetCurrent(info);
   const uv_check_t* immediate_check_handle = env->immediate_check_handle();
@@ -2711,7 +2741,7 @@ void NeedImmediateCallbackGetter(Local<String> property,
 
 
 static void NeedImmediateCallbackSetter(
-    Local<String> property,
+    Local<Name> property,
     Local<Value> value,
     const PropertyCallbackInfo<void>& info) {
   Environment* env = Environment::GetCurrent(info);
@@ -2774,15 +2804,20 @@ void StopProfilerIdleNotifier(const FunctionCallbackInfo<Value>& args) {
 
 #define READONLY_PROPERTY(obj, str, var)                                      \
   do {                                                                        \
-    obj->ForceSet(OneByteString(env->isolate(), str), var, v8::ReadOnly);     \
+    obj->DefineOwnProperty(env->context(),                                    \
+                           OneByteString(env->isolate(), str),                \
+                           var,                                               \
+                           v8::ReadOnly).FromJust();                          \
   } while (0)
 
 #define READONLY_DONT_ENUM_PROPERTY(obj, str, var)                            \
   do {                                                                        \
-    obj->ForceSet(OneByteString(env->isolate(), str),                         \
-                  var,                                                        \
-                  static_cast<v8::PropertyAttribute>(v8::ReadOnly |           \
-                                                     v8::DontEnum));          \
+    obj->DefineOwnProperty(env->context(),                                    \
+                           OneByteString(env->isolate(), str),                \
+                           var,                                               \
+                           static_cast<v8::PropertyAttribute>(v8::ReadOnly |  \
+                                                              v8::DontEnum))  \
+        .FromJust();                                                          \
   } while (0)
 
 
@@ -2795,10 +2830,12 @@ void SetupProcessObject(Environment* env,
 
   Local<Object> process = env->process_object();
 
-  process->SetAccessor(env->title_string(),
-                       ProcessTitleGetter,
-                       ProcessTitleSetter,
-                       env->as_external());
+  auto maybe = process->SetAccessor(env->context(),
+                                    env->title_string(),
+                                    ProcessTitleGetter,
+                                    ProcessTitleSetter,
+                                    env->as_external());
+  CHECK(maybe.FromJust());
 
   // process.version
   READONLY_PROPERTY(process,
@@ -2956,15 +2993,18 @@ void SetupProcessObject(Environment* env,
                                                 EnvDeleter,
                                                 EnvEnumerator,
                                                 env->as_external());
-  Local<Object> process_env = process_env_template->NewInstance();
+  Local<Object> process_env =
+      process_env_template->NewInstance(env->context()).ToLocalChecked();
   process->Set(env->env_string(), process_env);
 
   READONLY_PROPERTY(process, "pid", Integer::New(env->isolate(), getpid()));
   READONLY_PROPERTY(process, "features", GetFeatures(env));
-  process->SetAccessor(env->need_imm_cb_string(),
-                       NeedImmediateCallbackGetter,
-                       NeedImmediateCallbackSetter,
-                       env->as_external());
+  maybe = process->SetAccessor(env->context(),
+                               env->need_imm_cb_string(),
+                               NeedImmediateCallbackGetter,
+                               NeedImmediateCallbackSetter,
+                               env->as_external());
+  CHECK(maybe.FromJust());
 
   // -e, --eval
   if (eval_string) {
@@ -3025,6 +3065,16 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process, "traceDeprecation", True(env->isolate()));
   }
 
+  // --security-revert flags
+#define V(code, _, __)                                                        \
+  do {                                                                        \
+    if (IsReverted(REVERT_ ## code)) {                                        \
+      READONLY_PROPERTY(process, "REVERT_" #code, True(env->isolate()));      \
+    }                                                                         \
+  } while (0);
+  REVERSIONS(V)
+#undef V
+
   size_t exec_path_len = 2 * PATH_MAX;
   char* exec_path = new char[exec_path_len];
   Local<String> exec_path_value;
@@ -3039,10 +3089,13 @@ void SetupProcessObject(Environment* env,
   process->Set(env->exec_path_string(), exec_path_value);
   delete[] exec_path;
 
-  process->SetAccessor(env->debug_port_string(),
-                       DebugPortGetter,
-                       DebugPortSetter,
-                       env->as_external());
+  maybe = process->SetAccessor(env->context(),
+                               env->debug_port_string(),
+                               DebugPortGetter,
+                               DebugPortSetter,
+                               env->as_external());
+  CHECK(maybe.FromJust());
+
 
   // define various internal methods
   env->SetMethod(process,
@@ -3149,7 +3202,7 @@ void LoadEnvironment(Environment* env) {
   // The node.js file returns a function 'f'
   atexit(AtExit);
 
-  TryCatch try_catch;
+  TryCatch try_catch(env->isolate());
 
   // Disable verbose mode to stop FatalException() handler from trying
   // to handle the exception. Errors this early in the start-up phase
@@ -3262,7 +3315,11 @@ static void PrintHelp() {
          "  --v8-options          print v8 command line options\n"
 #if HAVE_OPENSSL
          "  --tls-cipher-list=val use an alternative default TLS cipher list\n"
-#endif
+#if NODE_FIPS_MODE
+         "  --enable-fips         enable FIPS crypto at startup\n"
+         "  --force-fips          force FIPS crypto (cannot be disabled)\n"
+#endif  /* NODE_FIPS_MODE */
+#endif /* HAVE_OPENSSL */
 #if defined(NODE_HAVE_I18N_SUPPORT)
          "  --icu-data-dir=dir    set ICU data load path to dir\n"
          "                        (overrides NODE_ICU_DATA)\n"
@@ -3274,19 +3331,19 @@ static void PrintHelp() {
          "\n"
          "Environment variables:\n"
 #ifdef _WIN32
-         "NODE_PATH               ';'-separated list of directories\n"
+         "NODE_PATH                ';'-separated list of directories\n"
 #else
-         "NODE_PATH               ':'-separated list of directories\n"
+         "NODE_PATH                ':'-separated list of directories\n"
 #endif
-         "                        prefixed to the module search path.\n"
-         "NODE_DISABLE_COLORS     set to 1 to disable colors in the REPL\n"
+         "                         prefixed to the module search path.\n"
+         "NODE_DISABLE_COLORS      set to 1 to disable colors in the REPL\n"
 #if defined(NODE_HAVE_I18N_SUPPORT)
-         "NODE_ICU_DATA           data path for ICU (Intl object) data\n"
+         "NODE_ICU_DATA            data path for ICU (Intl object) data\n"
 #if !defined(NODE_HAVE_SMALL_ICU)
-         "                        (will extend linked-in data)\n"
+         "                         (will extend linked-in data)\n"
 #endif
 #endif
-         "NODE_REPL_HISTORY       path to the persistent REPL history file\n"
+         "NODE_REPL_HISTORY        path to the persistent REPL history file\n"
          "\n"
          "Documentation can be found at https://nodejs.org/\n");
 }
@@ -3392,6 +3449,9 @@ static void ParseArgs(int* argc,
       track_heap_objects = true;
     } else if (strcmp(arg, "--throw-deprecation") == 0) {
       throw_deprecation = true;
+    } else if (strncmp(arg, "--security-revert=", 18) == 0) {
+      const char* cve = arg + 18;
+      Revert(cve);
     } else if (strcmp(arg, "--prof-process") == 0) {
       prof_process = true;
       short_circuit = true;
@@ -3401,7 +3461,13 @@ static void ParseArgs(int* argc,
 #if HAVE_OPENSSL
     } else if (strncmp(arg, "--tls-cipher-list=", 18) == 0) {
       default_cipher_list = arg + 18;
-#endif
+#if NODE_FIPS_MODE
+    } else if (strcmp(arg, "--enable-fips") == 0) {
+      enable_fips_crypto = true;
+    } else if (strcmp(arg, "--force-fips") == 0) {
+      force_fips_crypto = true;
+#endif /* NODE_FIPS_MODE */
+#endif /* HAVE_OPENSSL */
 #if defined(NODE_HAVE_I18N_SUPPORT)
     } else if (strncmp(arg, "--icu-data-dir=", 15) == 0) {
       icu_data_dir = arg + 15;
@@ -3524,7 +3590,7 @@ static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle) {
   }
 
   Isolate::Scope isolate_scope(isolate);
-  v8::Debug::ProcessDebugMessages();
+  v8::Debug::ProcessDebugMessages(isolate);
   CHECK_EQ(nullptr, node_isolate.exchange(isolate));
 }
 
@@ -4081,7 +4147,8 @@ Environment* CreateEnvironment(Isolate* isolate,
   Local<FunctionTemplate> process_template = FunctionTemplate::New(isolate);
   process_template->SetClassName(FIXED_ONE_BYTE_STRING(isolate, "process"));
 
-  Local<Object> process_object = process_template->GetFunction()->NewInstance();
+  Local<Object> process_object =
+      process_template->GetFunction()->NewInstance(context).ToLocalChecked();
   env->set_process_object(process_object);
 
   SetupProcessObject(env, argc, argv, exec_argc, exec_argv);
@@ -4127,7 +4194,10 @@ static void StartNodeInstance(void* arg) {
     if (instance_data->use_debug_agent())
       StartDebug(env, debug_wait_connect);
 
-    LoadEnvironment(env);
+    {
+      Environment::AsyncCallbackScope callback_scope(env);
+      LoadEnvironment(env);
+    }
 
     env->set_trace_sync_io(trace_sync_io);
 
@@ -4197,6 +4267,11 @@ int Start(int argc, char** argv) {
   Init(&argc, const_cast<const char**>(argv), &exec_argc, &exec_argv);
 
 #if HAVE_OPENSSL
+#ifdef NODE_FIPS_MODE
+  // In the case of FIPS builds we should make sure
+  // the random source is properly initialized first.
+  OPENSSL_init();
+#endif  // NODE_FIPS_MODE
   // V8 on Windows doesn't have a good source of entropy. Seed it from
   // OpenSSL's pool.
   V8::SetEntropySource(crypto::EntropySource);

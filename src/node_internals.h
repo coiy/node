@@ -22,10 +22,10 @@ struct sockaddr;
         v8::String::NewFromUtf8(isolate, constant);                           \
     v8::PropertyAttribute constant_attributes =                               \
         static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete);    \
-    target->ForceSet(isolate->GetCurrentContext(),                            \
-                     constant_name,                                           \
-                     constant_value,                                          \
-                     constant_attributes);                                    \
+    target->DefineOwnProperty(isolate->GetCurrentContext(),                   \
+                              constant_name,                                  \
+                              constant_value,                                 \
+                              constant_attributes).FromJust();                \
   } while (0)
 
 namespace node {
@@ -68,8 +68,6 @@ v8::Local<v8::Value> MakeCallback(Environment* env,
                                    v8::Local<v8::Function> callback,
                                    int argc = 0,
                                    v8::Local<v8::Value>* argv = nullptr);
-
-bool KickNextTick();
 
 // Convert a struct sockaddr to a { address: '1.2.3.4', port: 1234 } JS object.
 // Sets address and port properties on the info object and returns it.
@@ -124,6 +122,8 @@ inline static int snprintf(char *buffer, size_t n, const char *format, ...) {
 # define MUST_USE_RESULT
 # define NO_RETURN
 #endif
+
+bool IsExceptionDecorated(Environment* env, v8::Local<v8::Value> er);
 
 void AppendExceptionLine(Environment* env,
                          v8::Local<v8::Value> er,

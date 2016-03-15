@@ -7,12 +7,13 @@ It is an instance of [`EventEmitter`][].
 
 ## Event: 'beforeExit'
 
-This event is emitted when Node.js empties its event loop and has nothing else to
-schedule. Normally, Node.js exits when there is no work scheduled, but a listener
-for `'beforeExit'` can make asynchronous calls, and cause Node.js to continue.
+This event is emitted when Node.js empties its event loop and has nothing else 
+to schedule. Normally, Node.js exits when there is no work scheduled, but a 
+listener for `'beforeExit'` can make asynchronous calls, and cause Node.js to 
+continue.
 
-`'beforeExit'` is not emitted for conditions causing explicit termination, such as
-[`process.exit()`][] or uncaught exceptions, and should not be used as an
+`'beforeExit'` is not emitted for conditions causing explicit termination, such 
+as [`process.exit()`][] or uncaught exceptions, and should not be used as an
 alternative to the `'exit'` event unless the intention is to schedule more work.
 
 ## Event: 'exit'
@@ -59,7 +60,7 @@ is emitted with the following arguments:
 
 There is no notion of a top level for a promise chain at which rejections can
 always be handled. Being inherently asynchronous in nature, a promise rejection
-can be be handled at a future point in time — possibly much later than the
+can be handled at a future point in time — possibly much later than the
 event loop turn it takes for the `'unhandledRejection'` event to be emitted.
 
 Another way of stating this is that, unlike in synchronous code where there is
@@ -91,11 +92,12 @@ indefinitely) or upon process exit (more convenient for scripts).
 
 ## Event: 'uncaughtException'
 
-Emitted when an exception bubbles all the way back to the event loop. If a
-listener is added for this exception, the default action (which is to print
-a stack trace and exit) will not occur.
+The `'uncaughtException'` event is emitted when an exception bubbles all the
+way back to the event loop. By default, Node.js handles such exceptions by 
+printing the stack trace to stderr and exiting. Adding a handler for the
+`'uncaughtException'` event overrides this default behavior.
 
-Example of listening for `'uncaughtException'`:
+For example:
 
 ```js
 process.on('uncaughtException', (err) => {
@@ -111,22 +113,27 @@ nonexistentFunc();
 console.log('This will not run.');
 ```
 
-Note that `'uncaughtException'` is a very crude mechanism for exception
-handling.
+### Warning: Using `'uncaughtException'` correctly
 
-Do *not* use it as the Node.js equivalent of `On Error Resume Next`. An
-unhandled exception means your application - and by extension Node.js itself -
-is in an undefined state. Blindly resuming means *anything* could happen.
+Note that `'uncaughtException'` is a crude mechanism for exception handling
+intended to be used only as a last resort. The event *should not* be used as
+an equivalent to `On Error Resume Next`. Unhandled exceptions inherently mean
+that an application is in an undefined state. Attempting to resume application
+code without properly recovering from the exception can cause additional
+unforeseen and unpredictable issues.
 
-Think of resuming as pulling the power cord when you are upgrading your system.
-Nine out of ten times nothing happens - but the 10th time, your system is bust.
+Exceptions thrown from within the event handler will not be caught. Instead the
+process will exit with a non zero exit code and the stack trace will be printed.
+This is to avoid infinite recursion.
 
-`'uncaughtException'` should be used to perform synchronous cleanup before
-shutting down the process. It is not safe to resume normal operation after
-`'uncaughtException'`. If you do use it, restart your application after every
-unhandled exception!
+Attempting to resume normally after an uncaught exception can be similar to
+pulling out of the power cord when upgrading a computer -- nine out of ten
+times nothing happens - but the 10th time, the system becomes corrupted.
 
-You have been warned.
+The correct use of `'uncaughtException'` is to perform synchronous cleanup
+of allocated resources (e.g. file descriptors, handles, etc) before shutting
+down the process. It is not safe to resume normal operation after
+`'uncaughtException'`.
 
 ## Event: 'unhandledRejection'
 
@@ -138,8 +145,8 @@ a promise chain. This event is useful for detecting and keeping track of
 promises that were rejected whose rejections were not handled yet. This event
 is emitted with the following arguments:
 
- - `reason` the object with which the promise was rejected (usually an [`Error`][]
-instance).
+ - `reason` the object with which the promise was rejected (usually an 
+   [`Error`][] instance).
  - `p` the promise that was rejected.
 
 Here is an example that logs every unhandled rejection to the console
@@ -156,7 +163,7 @@ event:
 
 ```js
 somePromise.then((res) => {
-  return reportToUser(JSON.parse(res)); // note the typo
+  return reportToUser(JSON.pasre(res)); // note the typo (`pasre`)
 }); // no `.catch` or `.then`
 ```
 
@@ -175,7 +182,7 @@ var resource = new SomeResource();
 
 In cases like this, you may not want to track the rejection as a developer
 error like you would for other `'unhandledRejection'` events. To address
-this, you can either attach a dummy `.catch(function() { })` handler to
+this, you can either attach a dummy `.catch(() => { })` handler to
 `resource.loaded`, preventing the `'unhandledRejection'` event from being
 emitted, or you can use the [`'rejectionHandled'`][] event.
 
@@ -250,10 +257,10 @@ Note:
 
 - `SIGUSR1` is reserved by Node.js to start the debugger.  It's possible to
   install a listener but that won't stop the debugger from starting.
-- `SIGTERM` and `SIGINT` have default handlers on non-Windows platforms that resets
-  the terminal mode before exiting with code `128 + signal number`. If one of
-  these signals has a listener installed, its default behavior will be removed
-  (Node.js will no longer exit).
+- `SIGTERM` and `SIGINT` have default handlers on non-Windows platforms that 
+  resets the terminal mode before exiting with code `128 + signal number`. If 
+  one of these signals has a listener installed, its default behavior will be 
+  removed (Node.js will no longer exit).
 - `SIGPIPE` is ignored by default. It can have a listener installed.
 - `SIGHUP` is generated on Windows when the console window is closed, and on other
   platforms under various similar conditions, see signal(7). It can have a
@@ -265,11 +272,12 @@ Note:
 - `SIGINT` from the terminal is supported on all platforms, and can usually be
   generated with `CTRL+C` (though this may be configurable). It is not generated
   when terminal raw mode is enabled.
-- `SIGBREAK` is delivered on Windows when `CTRL+BREAK` is pressed, on non-Windows
+- `SIGBREAK` is delivered on Windows when `CTRL+BREAK` is pressed, on 
+  non-Windows
   platforms it can be listened on, but there is no way to send or generate it.
-- `SIGWINCH` is delivered when the console has been resized. On Windows, this will
-  only happen on write to the console when the cursor is being moved, or when a
-  readable tty is used in raw mode.
+- `SIGWINCH` is delivered when the console has been resized. On Windows, this 
+  will only happen on write to the console when the cursor is being moved, or 
+  when a readable tty is used in raw mode.
 - `SIGKILL` cannot have a listener installed, it will unconditionally terminate
   Node.js on all platforms.
 - `SIGSTOP` cannot have a listener installed.
@@ -422,6 +430,31 @@ But this will:
 ```js
 process.env.foo = 'bar';
 console.log(process.env.foo);
+```
+
+Assigning a property on `process.env` will implicitly convert the value
+to a string.
+
+Example:
+
+```js
+process.env.test = null;
+console.log(process.env.test);
+// => 'null'
+process.env.test = undefined;
+console.log(process.env.test);
+// => 'undefined'
+```
+
+Use `delete` to delete a property from `process.env`.
+
+Example:
+
+```js
+process.env.TEST = 1;
+delete process.env.TEST;
+console.log(process.env.TEST);
+// => undefined
 ```
 
 ## process.execArgv
@@ -693,7 +726,7 @@ function MyThing(options) {
 
   process.nextTick(() => {
     this.startDoingStuff();
-  }.bind(this));
+  });
 }
 
 var thing = new MyThing();
@@ -720,7 +753,7 @@ function maybeSync(arg, cb) {
 This API is hazardous.  If you do this:
 
 ```js
-maybeSync(true, function() {
+maybeSync(true, () => {
   foo();
 });
 bar();
@@ -796,10 +829,13 @@ In custom builds from non-release versions of the source tree, only the
 `name` property may be present. The additional properties should not be
 relied upon to exist.
 
-## process.send(message[, sendHandle][, callback])
+## process.send(message[, sendHandle[, options]][, callback])
 
 * `message` {Object}
 * `sendHandle` {Handle object}
+* `options` {Object}
+* `callback` {Function}
+* Return: {Boolean}
 
 When Node.js is spawned with an IPC channel attached, it can send messages to its
 parent process using `process.send()`. Each will be received as a
@@ -954,7 +990,7 @@ A `Writable Stream` to `stdout` (on fd `1`).
 For example, a `console.log` equivalent could look like this:
 
 ```js
-console.log = function(msg) {
+console.log = (msg) => {
   process.stdout.write(`${msg}\n`);
 };
 ```

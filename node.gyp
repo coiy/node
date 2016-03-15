@@ -73,6 +73,7 @@
       'lib/internal/cluster.js',
       'lib/internal/freelist.js',
       'lib/internal/linkedlist.js',
+      'lib/internal/net.js',
       'lib/internal/module.js',
       'lib/internal/readline.js',
       'lib/internal/repl.js',
@@ -131,6 +132,7 @@
         'src/node_javascript.cc',
         'src/node_main.cc',
         'src/node_os.cc',
+        'src/node_revert.cc',
         'src/node_util.cc',
         'src/node_v8.cc',
         'src/node_stat_watcher.cc',
@@ -170,6 +172,7 @@
         'src/node_version.h',
         'src/node_watchdog.h',
         'src/node_wrap.h',
+        'src/node_revert.h',
         'src/node_i18n.h',
         'src/pipe_wrap.h',
         'src/tty_wrap.h',
@@ -525,7 +528,7 @@
             }]
           ],
           'action': [
-            '<(python)',
+            'python',
             'tools/js2c.py',
             '<@(_outputs)',
             '<@(_inputs)',

@@ -12,14 +12,9 @@ The API for the `assert` module is [Locked][]. This means that there will be no
 additions or changes to any of the methods implemented and exposed by
 the module.
 
-## assert(value[, message]), assert.ok(value[, message])
+## assert(value[, message])
 
-Tests if `value` is truthy. It is equivalent to
-`assert.equal(!!value, true, message)`.
-
-If `value` is not truthy, an `AssertionError` is thrown with a `message`
-property set equal to the value of the `message` parameter. If the `message`
-parameter is `undefined`, a default error message is assigned.
+An alias of [`assert.ok()`][] .
 
 ```js
 const assert = require('assert');
@@ -31,15 +26,6 @@ assert(false);
 assert(0);
   // throws "AssertionError: 0 == true"
 assert(false, 'it\'s false');
-  // throws "AssertionError: it's false"
-
-assert.ok(true);  // OK
-assert.ok(1);     // OK
-assert.ok(false);
-  // throws "AssertionError: false == true"
-assert.ok(0);
-  // throws "AssertionError: 0 == true"
-assert.ok(false, 'it\'s false');
   // throws "AssertionError: it's false"
 ```
 
@@ -103,8 +89,9 @@ parameter is undefined, a default error message is assigned.
 
 ## assert.deepStrictEqual(actual, expected[, message])
 
-Generally identical to `assert.deepEqual` with the exception that primitive
-values are compared using the strict equality operator ( `===` ).
+Generally identical to `assert.deepEqual()` with two exceptions. First,
+primitive values are compared using the strict equality operator ( `===` ).
+Second, object comparisons include a strict equality check of their prototypes.
 
 ```js
 const assert = require('assert');
@@ -139,7 +126,7 @@ matching error type in the assertion:
 
 ```js
 assert.doesNotThrow(
-  function() {
+  () => {
     throw new TypeError('Wrong value');
   },
   SyntaxError
@@ -151,7 +138,7 @@ However, the following will result in an `AssertionError` with the message
 
 ```js
 assert.doesNotThrow(
-  function() {
+  () => {
     throw new TypeError('Wrong value');
   },
   TypeError
@@ -164,7 +151,7 @@ message:
 
 ```js
 assert.doesNotThrow(
-  function() {
+  () => {
     throw new TypeError('Wrong value');
   },
   TypeError,
@@ -228,7 +215,7 @@ assert.ifError(new Error()); // Throws Error
 
 ## assert.notDeepEqual(actual, expected[, message])
 
-Tests for any deep inequality. Opposite of [`assert.deepEqual`][].
+Tests for any deep inequality. Opposite of [`assert.deepEqual()`][].
 
 ```js
 const assert = require('assert');
@@ -250,16 +237,16 @@ const obj3 = {
 }
 const obj4 = Object.create(obj1);
 
-assert.deepEqual(obj1, obj1);
-  AssertionError: { a: { b: 1 } } notDeepEqual { a: { b: 1 } }
-
-assert.deepEqual(obj1, obj2);
-  // OK, obj1 and obj2 are not deeply equal
-
-assert.deepEqual(obj1, obj3);
+assert.notDeepEqual(obj1, obj1);
   // AssertionError: { a: { b: 1 } } notDeepEqual { a: { b: 1 } }
 
-assert.deepEqual(obj1, obj4);
+assert.notDeepEqual(obj1, obj2);
+  // OK, obj1 and obj2 are not deeply equal
+
+assert.notDeepEqual(obj1, obj3);
+  // AssertionError: { a: { b: 1 } } notDeepEqual { a: { b: 1 } }
+
+assert.notDeepEqual(obj1, obj4);
   // OK, obj1 and obj2 are not deeply equal
 ```
 
@@ -269,7 +256,7 @@ parameter is undefined, a default error message is assigned.
 
 ## assert.notDeepStrictEqual(actual, expected[, message])
 
-Tests for deep strict inequality. Opposite of [`assert.deepStrictEqual`][].
+Tests for deep strict inequality. Opposite of [`assert.deepStrictEqual()`][].
 
 ```js
 const assert = require('assert');
@@ -329,6 +316,28 @@ If the values are strictly equal, an `AssertionError` is thrown with a
 `message` property set equal to the value of the `message` parameter. If the
 `message` parameter is undefined, a default error message is assigned.
 
+## assert.ok(value[, message])
+
+Tests if `value` is truthy. It is equivalent to
+`assert.equal(!!value, true, message)`.
+
+If `value` is not truthy, an `AssertionError` is thrown with a `message`
+property set equal to the value of the `message` parameter. If the `message`
+parameter is `undefined`, a default error message is assigned.
+
+```js
+const assert = require('assert');
+
+assert.ok(true);  // OK
+assert.ok(1);     // OK
+assert.ok(false);
+  // throws "AssertionError: false == true"
+assert.ok(0);
+  // throws "AssertionError: 0 == true"
+assert.ok(false, 'it\'s false');
+  // throws "AssertionError: it's false"
+```
+
 ## assert.strictEqual(actual, expected[, message])
 
 Tests strict equality as determined by the strict equality operator ( `===` ).
@@ -359,7 +368,7 @@ Validate instanceof using constructor:
 
 ```js
 assert.throws(
-  function() {
+  () => {
     throw new Error('Wrong value');
   },
   Error
@@ -370,7 +379,7 @@ Validate error message using [`RegExp`][]:
 
 ```js
 assert.throws(
-  function() {
+  () => {
     throw new Error('Wrong value');
   },
   /value/
@@ -381,7 +390,7 @@ Custom error validation:
 
 ```js
 assert.throws(
-  function() {
+  () => {
     throw new Error('Wrong value');
   },
   function(err) {
@@ -394,8 +403,9 @@ assert.throws(
 ```
 
 [Locked]: documentation.html#documentation_stability_index
-[`assert.deepEqual`]: #assert_assert_deepequal_actual_expected_message
-[`assert.deepStrictEqual`]: #assert_assert_deepstrictequal_actual_expected_message
+[`assert.deepEqual()`]: #assert_assert_deepequal_actual_expected_message
+[`assert.deepStrictEqual()`]: #assert_assert_deepstrictequal_actual_expected_message
+[`assert.ok()`]: #assert_assert_ok_value_message
 [`assert.throws()`]: #assert_assert_throws_block_error_message
 [`Error`]: errors.html#errors_class_error
 [`RegExp`]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions

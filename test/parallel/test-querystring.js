@@ -148,29 +148,32 @@ assert.strictEqual('foo=', qs.stringify({ foo: NaN }));
 assert.strictEqual('foo=', qs.stringify({ foo: Infinity }));
 
 // nested
-var f = qs.stringify({
-  a: 'b',
-  q: qs.stringify({
-    x: 'y',
-    y: 'z'
-  })
-});
-assert.equal(f, 'a=b&q=x%3Dy%26y%3Dz');
+{
+  const f = qs.stringify({
+    a: 'b',
+    q: qs.stringify({
+      x: 'y',
+      y: 'z'
+    })
+  });
+  assert.equal(f, 'a=b&q=x%3Dy%26y%3Dz');
+}
 
 assert.doesNotThrow(function() {
   qs.parse(undefined);
 });
 
 // nested in colon
-var f = qs.stringify({
-  a: 'b',
-  q: qs.stringify({
-    x: 'y',
-    y: 'z'
-  }, ';', ':')
-}, ';', ':');
-assert.equal(f, 'a:b;q:x%3Ay%3By%3Az');
-
+{
+  const f = qs.stringify({
+    a: 'b',
+    q: qs.stringify({
+      x: 'y',
+      y: 'z'
+    }, ';', ':')
+  }, ';', ':');
+  assert.equal(f, 'a:b;q:x%3Ay%3By%3Az');
+}
 
 assert.deepEqual({}, qs.parse());
 
@@ -245,3 +248,6 @@ qs.unescape = function(str) {
 };
 assert.deepEqual(qs.parse('foo=bor'), {f__: 'b_r'});
 qs.unescape = prevUnescape;
+
+// test separator and "equals" parsing order
+assert.deepEqual(qs.parse('foo&bar', '&', '&'), { foo: '', bar: '' });

@@ -313,7 +313,7 @@ to the domain.
 
 ### domain.add(emitter)
 
-* `emitter` {EventEmitter | Timer} emitter or timer to be added to the domain
+* `emitter` {EventEmitter|Timer} emitter or timer to be added to the domain
 
 Explicitly adds an emitter to the domain.  If any event handlers called by
 the emitter throw an error, or if the emitter emits an `'error'` event, it
@@ -329,7 +329,7 @@ from that one, and bound to this one instead.
 
 ### domain.remove(emitter)
 
-* `emitter` {EventEmitter | Timer} emitter or timer to be removed from the domain
+* `emitter` {EventEmitter|Timer} emitter or timer to be removed from the domain
 
 The opposite of [`domain.add(emitter)`][].  Removes domain handling from the
 specified emitter.
@@ -349,7 +349,7 @@ thrown will be routed to the domain's `'error'` event.
 const d = domain.create();
 
 function readSomeFile(filename, cb) {
-  fs.readFile(filename, 'utf8', d.bind(function(er, data) {
+  fs.readFile(filename, 'utf8', d.bind((er, data) => {
     // if this throws, it will also be passed to the domain
     return cb(er, data ? JSON.parse(data) : null);
   }));
@@ -380,7 +380,7 @@ with a single error handler in a single place.
 const d = domain.create();
 
 function readSomeFile(filename, cb) {
-  fs.readFile(filename, 'utf8', d.intercept(function(data) {
+  fs.readFile(filename, 'utf8', d.intercept((data) => {
     // note, the first argument is never passed to the
     // callback since it is assumed to be the 'Error' argument
     // and thus intercepted by the domain.

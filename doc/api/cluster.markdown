@@ -36,7 +36,7 @@ if (cluster.isMaster) {
 Running Node.js will now share port 8000 between the workers:
 
 ```
-% NODE_DEBUG=cluster node server.js
+$ NODE_DEBUG=cluster node server.js
 23521,Master Worker 23524 online
 23521,Master Worker 23526 online
 23521,Master Worker 23523 online
@@ -50,7 +50,7 @@ server in a worker.
 
 <!--type=misc-->
 
-The worker processes are spawned using the [`child_process.fork`][] method,
+The worker processes are spawned using the [`child_process.fork()`][] method,
 so that they can communicate with the parent via IPC and pass server
 handles back and forth.
 
@@ -244,7 +244,7 @@ Causes `.suicide` to be set.
 Note that after a server is closed, it will no longer accept new connections,
 but connections may be accepted by any other listening worker. Existing
 connections will be allowed to close as usual. When no more connections exist,
-see [server.close()][], the IPC channel to the worker will close allowing it to
+see [`server.close()`][], the IPC channel to the worker will close allowing it to
 die gracefully.
 
 The above applies *only* to server connections, client connections are not
@@ -331,7 +331,7 @@ it is [`kill`][].
 
 ### worker.process
 
-* {ChildProcess object}
+* {ChildProcess}
 
 All workers are created using [`child_process.fork()`][], the returned object
 from this function is stored as `.process`. In a worker, the global `process`
@@ -346,7 +346,7 @@ disconnection.
 ### worker.send(message[, sendHandle][, callback])
 
 * `message` {Object}
-* `sendHandle` {Handle object}
+* `sendHandle` {Handle}
 * `callback` {Function}
 * Return: Boolean
 
@@ -394,7 +394,7 @@ worker.kill();
 
 ## Event: 'disconnect'
 
-* `worker` {Worker object}
+* `worker` {cluster.Worker}
 
 Emitted after the worker IPC channel has disconnected. This can occur when a
 worker exits gracefully, is killed, or is disconnected manually (such as with
@@ -412,7 +412,7 @@ cluster.on('disconnect', (worker) => {
 
 ## Event: 'exit'
 
-* `worker` {Worker object}
+* `worker` {cluster.Worker}
 * `code` {Number} the exit code, if it exited normally.
 * `signal` {String} the name of the signal (eg. `'SIGHUP'`) that caused
   the process to be killed.
@@ -433,7 +433,7 @@ See [child_process event: 'exit'][].
 
 ## Event: 'fork'
 
-* `worker` {Worker object}
+* `worker` {cluster.Worker}
 
 When a new worker is forked the cluster module will emit a `'fork'` event.
 This can be used to log worker activity, and create your own timeout.
@@ -458,7 +458,7 @@ cluster.on('exit', (worker, code, signal) => {
 
 ## Event: 'listening'
 
-* `worker` {Worker object}
+* `worker` {cluster.Worker}
 * `address` {Object}
 
 After calling `listen()` from a worker, when the `'listening'` event is emitted on
@@ -485,16 +485,34 @@ The `addressType` is one of:
 
 ## Event: 'message'
 
-* `worker` {Worker object}
+* `worker` {cluster.Worker}
 * `message` {Object}
+* `handle` {undefined|Object}
 
 Emitted when any worker receives a message.
 
 See [child_process event: 'message'][].
 
+Before Node.js v6.0, this event emitted only the message and the handle,
+but not the worker object, contrary to what the documentation stated.
+
+If you need to support older versions and don't need the worker object,
+you can work around the discrepancy by checking the number of arguments:
+
+```js
+cluster.on('message', function(worker, message, handle) {
+  if (arguments.length === 2) {
+    handle = message;
+    message = worker;
+    worker = undefined;
+  }
+  // ...
+});
+```
+
 ## Event: 'online'
 
-* `worker` {Worker object}
+* `worker` {cluster.Worker}
 
 After forking a new worker, the worker should respond with an online message.
 When the master receives an online message it will emit this event.
@@ -536,7 +554,7 @@ This can only be called from the master process.
 ## cluster.fork([env])
 
 * `env` {Object} Key/value pairs to add to worker process environment.
-* return {Worker object}
+* return {cluster.Worker}
 
 Spawn a new worker process.
 
@@ -624,6 +642,7 @@ cluster.setupMaster({
 });
 cluster.fork(); // https worker
 cluster.setupMaster({
+  exec: 'worker.js',
   args: ['--use', 'http']
 });
 cluster.fork(); // http worker

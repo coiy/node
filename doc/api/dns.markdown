@@ -126,6 +126,10 @@ on some operating systems (e.g FreeBSD 10.1).
 Resolves the given `address` and `port` into a hostname and service using
 the operating system's underlying `getnameinfo` implementation.
 
+If `address` is not a valid IP address, a `TypeError` will be thrown.
+The `port` will be coerced to a number. If it is not a legal port, a `TypeError`
+will be thrown.
+
 The callback has arguments `(err, hostname, service)`. The `hostname` and
 `service` arguments are strings (e.g. `'localhost'` and `'http'` respectively).
 
@@ -151,7 +155,7 @@ Valid values for `rrtype` are:
  * `'MX'` - mail exchange records
  * `'TXT'` - text records
  * `'SRV'` - SRV records
- * `'PTR'` - used for reverse IP lookups
+ * `'PTR'` - PTR records
  * `'NS'` - name server records
  * `'CNAME'` - canonical name records
  * `'SOA'` - start of authority record
@@ -181,7 +185,7 @@ will contain an array of IPv6 addresses.
 
 Uses the DNS protocol to resolve `CNAME` records for the `hostname`. The
 `addresses` argument passed to the `callback` function
-will contain an of canonical name records available for the `hostname`
+will contain an array of canonical name records available for the `hostname`
 (e.g. `['bar.example.com']`).
 
 ## dns.resolveMx(hostname, callback)
@@ -243,6 +247,12 @@ be an array of objects with the following properties:
   name: 'service.example.com'
 }
 ```
+
+## dns.resolvePtr(hostname, callback)
+
+Uses the DNS protocol to resolve pointer records (`PTR` records) for the
+`hostname`. The `addresses` argument passed to the `callback` function will
+be an array of strings containing the reply records.
 
 ## dns.resolveTxt(hostname, callback)
 

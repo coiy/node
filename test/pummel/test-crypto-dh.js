@@ -2,9 +2,7 @@
 var common = require('../common');
 var assert = require('assert');
 
-try {
-  var crypto = require('crypto');
-} catch (e) {
+if (!common.hasCrypto) {
   console.log('1..0 # Skipped: node compiled without OpenSSL.');
   return;
 }
@@ -30,7 +28,7 @@ var hashes = {
   modp18 : 'a870b491bbbec9b131ae9878d07449d32e54f160'
 };
 
-for (var name in hashes) {
+for (const name in hashes) {
   var group = crypto.getDiffieHellman(name);
   var private_key = group.getPrime('hex');
   var hash1 = hashes[name];
@@ -40,7 +38,7 @@ for (var name in hashes) {
   assert.equal(group.getGenerator('hex'), '02');
 }
 
-for (var name in hashes) {
+for (const name in hashes) {
   // modp1 is 768 bits, FIPS requires >= 1024
   if (name == 'modp1' && common.hasFipsCrypto)
     continue;

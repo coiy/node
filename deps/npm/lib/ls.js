@@ -120,7 +120,6 @@ function filterByEnv (data) {
   var devDependencies = data.devDependencies || []
   Object.keys(data.dependencies).forEach(function (name) {
     var keys = Object.keys(devDependencies)
-    if (production && !dev && keys.indexOf(name) !== -1) return
     if (dev && !production && keys.indexOf(name) === -1) return
     if (!dev && keys.indexOf(name) !== -1 && data.dependencies[name].missing) return
     dependencies[name] = data.dependencies[name]
@@ -139,13 +138,14 @@ function isCruft (data) {
   return data.extraneous && data.error && data.error.code === 'ENOTDIR'
 }
 
-function getLite (data, noname) {
+function getLite (data, noname, depth) {
   var lite = {}
 
   if (isCruft(data)) return lite
 
   var maxDepth = npm.config.get('depth')
 
+  if (typeof depth === 'undefined') depth = 0
   if (!noname && data.name) lite.name = data.name
   if (data.version) lite.version = data.version
   if (data.extraneous) {
@@ -213,6 +213,9 @@ function getLite (data, noname) {
           lite.problems.push(pdm)
         })
         return [d, { required: dep, peerMissing: true }]
+      } else if (npm.config.get('json')) {
+        if (depth === maxDepth) delete dep.dependencies
+        return [d, getLite(dep, true, depth + 1)]
       }
       return [d, getLite(dep, true)]
     }).reduce(function (deps, d) {

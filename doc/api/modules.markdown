@@ -20,13 +20,10 @@ The contents of `circle.js`:
 ```js
 const PI = Math.PI;
 
-exports.area = function (r) {
-  return PI * r * r;
-};
+exports.area = (r) => PI * r * r;
 
-exports.circumference = function (r) {
-  return 2 * PI * r;
-};
+exports.circumference = (r) => 2 * PI * r;
+
 ```
 
 The module `circle.js` has exported the functions `area()` and
@@ -53,11 +50,9 @@ The `square` module is defined in `square.js`:
 
 ```js
 // assigning to exports will not modify module, must use module.exports
-module.exports = function(width) {
+module.exports = (width) => {
   return {
-    area: function() {
-      return width * width;
-    }
+    area: () => width * width
   };
 }
 ```
@@ -216,6 +211,12 @@ resolve to a different filename based on the location of the calling
 module (loading from `node_modules` folders), it is not a *guarantee*
 that `require('foo')` will always return the exact same object, if it
 would resolve to different files.
+
+Additionally, on case-insensitive file systems or operating systems, different
+resolved filenames can point to the same file, but the cache will still treat
+them as different modules and will reload the file multiple times. For example,
+`require('./foo')` and `require('./FOO')` return two different objects,
+irrespective of whether or not `./foo` and `./FOO` are the same file.
 
 ## Core Modules
 
@@ -498,12 +499,12 @@ To illustrate the behavior, imagine this hypothetical implementation of
 ```js
 function require(...) {
   // ...
-  function (module, exports) {
+  ((module, exports) => {
     // Your module code here
     exports = some_func;        // re-assigns exports, exports is no longer
                                 // a shortcut, and nothing is exported.
     module.exports = some_func; // makes your module export 0
-  } (module, module.exports);
+  })(module, module.exports);
   return module;
 }
 ```
@@ -533,7 +534,7 @@ loading.
 
 ### module.parent
 
-* {Module Object}
+* {Object} Module object
 
 The module that first required this one.
 

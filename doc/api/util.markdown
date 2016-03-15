@@ -14,7 +14,7 @@ are unnecessary for Node.js's internal functionality.
 
 ## util.debug(string)
 
-    Stability: 0 - Deprecated: use console.error() instead.
+    Stability: 0 - Deprecated: Use [`console.error()`][] instead.
 
 Deprecated predecessor of `console.error`.
 
@@ -58,7 +58,7 @@ Marks that a method should not be used any more.
 ```js
 const util = require('util');
 
-exports.puts = util.deprecate(function() {
+exports.puts = util.deprecate(() => {
   for (var i = 0, len = arguments.length; i < len; ++i) {
     process.stdout.write(arguments[i] + '\n');
   }
@@ -83,7 +83,7 @@ when the deprecated API is used.  Configurable at run-time through the
 
 ## util.error([...])
 
-    Stability: 0 - Deprecated: Use console.error() instead.
+    Stability: 0 - Deprecated: Use [`console.error()`][] instead.
 
 Deprecated predecessor of `console.error`.
 
@@ -254,7 +254,7 @@ util.inspect(obj);
 
 Internal alias for [`Array.isArray`][].
 
-Returns `true` if the given "object" is an `Array`. `false` otherwise.
+Returns `true` if the given "object" is an `Array`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -271,7 +271,7 @@ util.isArray({})
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `Boolean`. `false` otherwise.
+Returns `true` if the given "object" is a `Boolean`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -286,11 +286,9 @@ util.isBoolean(false)
 
 ## util.isBuffer(object)
 
-    Stability: 0 - Deprecated
+    Stability: 0 - Deprecated: Use [`Buffer.isBuffer()`][] instead.
 
-Use `Buffer.isBuffer()` instead.
-
-Returns `true` if the given "object" is a `Buffer`. `false` otherwise.
+Returns `true` if the given "object" is a `Buffer`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -307,7 +305,7 @@ util.isBuffer(new Buffer('hello world'))
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `Date`. `false` otherwise.
+Returns `true` if the given "object" is a `Date`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -324,7 +322,8 @@ util.isDate({})
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is an [`Error`][]. `false` otherwise.
+Returns `true` if the given "object" is an [`Error`][]. Otherwise, returns
+`false`.
 
 ```js
 const util = require('util');
@@ -337,11 +336,28 @@ util.isError({ name: 'Error', message: 'an error occurred' })
   // false
 ```
 
+Note that this method relies on `Object.prototype.toString()` behavior. It is
+possible to obtain an incorrect result when the `object` argument manipulates
+`@@toStringTag`.
+
+```js
+// This example requires the `--harmony-tostring` flag
+const util = require('util');
+const obj = { name: 'Error', message: 'an error occurred' };
+
+util.isError(obj);
+  // false
+obj[Symbol.toStringTag] = 'Error';
+util.isError(obj);
+  // true
+```
+
 ## util.isFunction(object)
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `Function`. `false` otherwise.
+Returns `true` if the given "object" is a `Function`. Otherwise, returns
+`false`.
 
 ```js
 const util = require('util');
@@ -361,7 +377,8 @@ util.isFunction(Bar)
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is strictly `null`. `false` otherwise.
+Returns `true` if the given "object" is strictly `null`. Otherwise, returns
+`false`.
 
 ```js
 const util = require('util');
@@ -378,7 +395,8 @@ util.isNull(null)
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is `null` or `undefined`. `false` otherwise.
+Returns `true` if the given "object" is `null` or `undefined`. Otherwise,
+returns `false`.
 
 ```js
 const util = require('util');
@@ -395,7 +413,7 @@ util.isNullOrUndefined(null)
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `Number`. `false` otherwise.
+Returns `true` if the given "object" is a `Number`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -415,7 +433,7 @@ util.isNumber(NaN)
     Stability: 0 - Deprecated
 
 Returns `true` if the given "object" is strictly an `Object` __and__ not a
-`Function`. `false` otherwise.
+`Function`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -434,7 +452,8 @@ util.isObject(function(){})
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a primitive type. `false` otherwise.
+Returns `true` if the given "object" is a primitive type. Otherwise, returns
+`false`.
 
 ```js
 const util = require('util');
@@ -463,7 +482,7 @@ util.isPrimitive(new Date())
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `RegExp`. `false` otherwise.
+Returns `true` if the given "object" is a `RegExp`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -480,7 +499,7 @@ util.isRegExp({})
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `String`. `false` otherwise.
+Returns `true` if the given "object" is a `String`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -499,7 +518,7 @@ util.isString(5)
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is a `Symbol`. `false` otherwise.
+Returns `true` if the given "object" is a `Symbol`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -516,7 +535,7 @@ util.isSymbol(Symbol('foo'))
 
     Stability: 0 - Deprecated
 
-Returns `true` if the given "object" is `undefined`. `false` otherwise.
+Returns `true` if the given "object" is `undefined`. Otherwise, returns `false`.
 
 ```js
 const util = require('util');
@@ -538,13 +557,13 @@ Output with timestamp on `stdout`.
 
 ## util.print([...])
 
-    Stability: 0 - Deprecated: Use `console.log` instead.
+    Stability: 0 - Deprecated: Use [`console.log()`][] instead.
 
 Deprecated predecessor of `console.log`.
 
 ## util.puts([...])
 
-    Stability: 0 - Deprecated: Use console.log() instead.
+    Stability: 0 - Deprecated: Use [`console.log()`][] instead.
 
 Deprecated predecessor of `console.log`.
 
@@ -553,3 +572,6 @@ Deprecated predecessor of `console.log`.
 [Customizing `util.inspect` colors]: #util_customizing_util_inspect_colors
 [here]: #util_customizing_util_inspect_colors
 [`Error`]: errors.html#errors_class_error
+[`console.log()`]: console.html#console_console_log_data
+[`console.error()`]: console.html#console_console_error_data
+[`Buffer.isBuffer()`]: buffer.html#buffer_class_method_buffer_isbuffer_obj
